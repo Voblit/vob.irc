@@ -3,7 +3,7 @@
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta charset="utf-8">
-<title>4chan-Style Chat</title>
+<title>alpha test</title>
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
@@ -674,12 +674,13 @@
   <!-- Firebase Config (REPLACE WITH YOUR OWN CONFIG KEYS) -->
   <script>
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyC0FZ0pFJFcC66cF55zLVOHL-xXLTX0u9g",
+      authDomain: "chat-for-school-be9bb.firebaseapp.com",
+      projectId: "chat-for-school-be9bb",
+      storageBucket: "chat-for-school-be9bb.firebasestorage.app",
+      messagingSenderId: "666344060632",
+      appId: "1:666344060632:web:6f26be79407477fe37c9ad",
+      measurementId: "G-QG7S8V8V1N"
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
@@ -808,7 +809,6 @@
       // Use a real-time listener instead of intervals (onSnapshot)
       messageListener = db.collection("channels").doc(currentChannelName).collection("messages")
         .orderBy("timestamp")
-        .limit(50)
         .onSnapshot((querySnapshot) => {
           const messages = [];
           querySnapshot.forEach((doc) => {
@@ -1020,6 +1020,7 @@
       profileModal.style.display = "none";
     }
 
+    // Handles compression of uploaded images to 100x100 to reduce size
     function handlePfpUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -1053,7 +1054,7 @@
         description: description,
         pfp: pfpBase64,
         isNitro: isNitro,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        lastUpdated: firebase.FieldValue.serverTimestamp()
       }, { merge: true }).then(() => {
         closeProfileModal();
         appendSystemMessage("Profile updated successfully!");
@@ -1082,6 +1083,7 @@
       });
     }
 
+    // Switching channels and initializing listeners cleanly
     function switchChannel(channelName) {
       currentChannelName = channelName;
       document.querySelectorAll(".channel-item").forEach(el => {
