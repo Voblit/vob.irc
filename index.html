@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<title>4chan-Style Chat</title>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+
+<style>
+  /* ===================== 4chan Theme ===================== */
+  :root {
+    --bg-deep: #f0e0d6;
+    --accent: #117743;
+    --muted: #789922;
+    --text: #800000;
+    --shadow: none;
+    --font-chat: "Arial", "Helvetica", sans-serif;
+    --body-bg: #f0e0d6;
+    --panel-bg: #d6daf0;
+    --panel-border: 1px solid #b7c5d9;
+    --bubble-radius: 0px;
+    --bubble-padding: 4px 8px;
+    --sidebar-bg: #d6daf0;
+    --sidebar-border: 1px solid #b7c5d9;
+  }
+
+  /* Global Layout */
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--body-bg);
+    color: var(--text);
+    font-family: var(--font-chat);
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+  }
+
+  .app-layout {
+    display: flex;
+    max-width: 1200px;
+    margin: 10px auto;
+    padding: 0 16px;
+    gap: 16px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Cover Page */
+  #coverPage {
+    position: fixed;
+    inset: 0;
+    background: var(--body-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 20px;
+    text-align: center;
+  }
+
+  #coverContent {
+    max-width: 600px;
+    background: var(--panel-bg);
+    border: var(--panel-border);
+    padding: 20px;
+    border-radius: 0;
+  }
+
+  #coverTitle {
+    font-size: 24px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+
+  #coverDesc {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  #coverButton {
+    padding: 10px 20px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    font-family: var(--font-chat);
+    font-size: 14px;
+  }
+
+  /* Marquee Bar */
+  .marquee-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border-radius: 0;
+    background: var(--panel-bg);
+    border: var(--panel-border);
+    box-shadow: none;
+    margin-bottom: 10px;
+  }
+
+  .marquee-bar marquee {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 13px;
+    padding: 2px 8px;
+    font-family: sans-serif;
+    text-transform: uppercase;
+    letter-spacing: -1px;
+  }
+
+  /* Chat Panel */
+  #screen {
+    position: relative;
+    height: 440px;
+    border-radius: 0;
+    padding: 12px;
+    margin-top: 12px;
+    background: var(--panel-bg);
+    border: var(--panel-border);
+    box-shadow: none;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: var(--font-chat);
+    font-size: 13px;
+  }
+
+  /* Chat Message Bubbles */
+  .line {
+    margin: 4px 0;
+    padding: var(--bubble-padding);
+    border-radius: var(--bubble-radius);
+    border: 1px solid #b7c5d9;
+    border-left: none;
+    border-top: none;
+    width: fit-content;
+    max-width: 95%;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+
+  .sys {
+    color: var(--muted);
+    font-style: normal;
+    font-weight: normal;
+  }
+
+  .sys::before {
+    content: ">";
+  }
+
+  .name {
+    color: var(--accent) !important;
+    font-size: 13px;
+    font-weight: bold;
+    background: transparent;
+    padding: 0;
+    margin-right: 4px;
+  }
+
+  .msgtext {
+    color: var(--text);
+    font-family: "Arial", sans-serif;
+  }
+
+  .rainbow {
+    animation: rainbow 3s linear infinite;
+    background: transparent;
+  }
+
+  @keyframes rainbow {
+    0% { color: #ff4b4b; }
+    18% { color: #ff8a36; }
+    35% { color: #ffd24a; }
+    52% { color: #6ef082; }
+    70% { color: #3ec6ff; }
+    85% { color: #c98cff; }
+    100% { color: #ff4b4b; }
+  }
+
+  /* User Info Container */
+  .user-info-container {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .user-pfp {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    object-fit: cover;
+  }
+
+  /* User Hover Box (Discord-style) */
+  .user-hover-box {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2f3136;
+    border: 1px solid #202225;
+    border-radius: 8px;
+    padding: 12px;
+    width: 200px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    display: none;
+    color: #fff;
+    font-family: "Arial", sans-serif;
+  }
+
+  .user-hover-box.visible {
+    display: block;
+  }
+
+  .user-hover-box .pfp-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+    object-fit: cover;
+    border: 2px solid #117743;
+  }
+
+  .user-hover-box .username {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+
+  .user-hover-box .description {
+    color: #b9bbbe;
+    font-size: 12px;
+    margin-bottom: 8px;
+    text-align: center;
+    word-break: break-word;
+  }
+
+  .user-hover-box .nitro-badge {
+    background: linear-gradient(90deg, #5e17eb, #8b5cf6);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    display: inline-block;
+    margin-left: 4px;
+  }
+
+  /* Controls Area */
+  #controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+    position: relative;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    padding: 10px;
+    border-radius: 0;
+    border: 1px solid #a9a9a9;
+    background: #ffffff;
+    color: #000;
+    outline: none;
+    font-family: var(--font-chat);
+    font-size: 13px;
+  }
+
+  button {
+    padding: 10px 12px;
+    border-radius: 0;
+    border: 1px solid #a9a9a9;
+    background: #ececec;
+    color: #000;
+    font-weight: normal;
+    cursor: pointer;
+    font-family: var(--font-chat);
+    font-size: 12px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 240px;
+    background: var(--sidebar-bg);
+    border: var(--sidebar-border);
+    border-radius: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    box-shadow: none;
+    font-size: 12px;
+  }
+
+  .sidebar-section-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #af0a0f;
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-family: sans-serif;
+    border-bottom: 1px solid #b7c5d9;
+  }
+
+  /* Channel List */
+  .channel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .channel-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px;
+    border-radius: 0;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    color: #34345c;
+  }
+
+  .channel-item:hover {
+    background: #eaefef;
+    color: #ff0000;
+  }
+
+  .channel-item.active {
+    background: transparent;
+    color: #af0a0f;
+    font-weight: bold;
+    border-left: none;
+  }
+
+  .channel-main-label::before {
+    content: "/";
+    color: #34345c;
+  }
+
+  /* Add Channel Button */
+  .add-channel-btn-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 6px;
+    padding: 2px;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 0;
+    cursor: pointer;
+    background: #cbbba1;
+    border: 1px dashed #800000;
+    color: #800000;
+    transition: all 0.2s ease;
+  }
+
+  /* Credits Container */
+  .credits-container {
+    border: 1px solid #b7c5d9;
+    background: #eaefef;
+    border-radius: 0;
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #000;
+  }
+
+  .credits-header {
+    font-weight: bold;
+    color: #af0a0f;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  /* Modals */
+  .custom-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1500;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(6px);
+  }
+
+  .custom-dialog-card {
+    width: 92%;
+    max-width: 500px;
+    padding: 20px;
+    border-radius: 0;
+    background: #d6daf0;
+    border: 1px solid #b7c5d9;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: #000;
+  }
+
+  .custom-dialog-card h3 {
+    margin: 0;
+    color: #af0a0f;
+    font-size: 18px;
+  }
+
+  .custom-dialog-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .dialog-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .dialog-form-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #af0a0f;
+    font-weight: bold;
+  }
+
+  .dialog-form-group select,
+  .dialog-form-group input {
+    padding: 10px;
+    border-radius: 0;
+    background: #fff;
+    border: 1px solid #a9a9a9;
+    color: #000;
+    outline: none;
+    font-family: var(--font-chat);
+    font-size: 13px;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  /* Profile Modal */
+  #profileModalCard {
+    width: 92%;
+    max-width: 400px;
+    padding: 20px;
+    border-radius: 0;
+    background: #d6daf0;
+    border: 1px solid #b7c5d9;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: #000;
+  }
+
+  .profile-pfp-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .profile-pfp-preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #117743;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .profile-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .profile-input-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #af0a0f;
+    font-weight: bold;
+  }
+
+  .profile-input-group input[type="text"],
+  .profile-input-group textarea {
+    padding: 10px;
+    border-radius: 0;
+    background: #fff;
+    border: 1px solid #a9a9a9;
+    color: #000;
+    outline: none;
+    font-family: var(--font-chat);
+    font-size: 13px;
+    width: 100%;
+  }
+
+  .profile-input-group textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  /* Boot Overlay */
+  #bootOverlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    color: #33ff33;
+    font-family: "Courier New", monospace;
+    padding: 12px;
+    overflow: hidden;
+    z-index: 2000;
+  }
+
+  #bootOverlay .boot-line {
+    margin: 6px 0;
+    color: var(--accent);
+    opacity: 0.95;
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .app-layout {
+      flex-direction: column;
+      margin: 10px auto;
+    }
+    .sidebar {
+      width: auto;
+    }
+    #screen {
+      height: 50vh;
+    }
+  }
+</style>
+</head>
+<body>
+  <!-- Cover Page -->
+  <div id="coverPage">
+    <div id="coverContent">
+      <div id="coverTitle">4chan-Style Chat</div>
+      <div id="coverDesc">
+        A simple, no-nonsense chat interface inspired by 4chan. 
+        No fancy themes, no unnecessary features—just pure, unfiltered chat.
+      </div>
+      <button id="enterChatBtn">Enter Chat</button>
+    </div>
+  </div>
+
+  <!-- Boot Overlay -->
+  <div id="bootOverlay"></div>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div>
+        <div class="sidebar-section-title">Channels</div>
+        <div class="channel-list" id="dynamicChannelContainer"></div>
+        <div class="add-channel-btn-trigger" onclick="openChannelPopup()">+</div>
+      </div>
+
+      <div>
+        <div class="sidebar-section-title">Account</div>
+        <div class="credits-container" id="sessionStatusCard" style="display: flex; flex-direction: column; gap: 8px;">
+          <div>Active Log: <strong id="sessionUserLabel" style="color: var(--accent);">Connecting...</strong></div>
+          <button id="editProfileBtn" style="width: 100%; padding: 6px; font-size: 11px; background: #117743; color: #fff; border: none; border-radius: 0; display: none; cursor: pointer;">Edit Profile</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="sidebar-section-title">Info</div>
+        <div class="credits-container">
+          <div class="credits-header">About</div>
+          <div>A simple 4chan-style chat interface.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="marquee-bar">
+        <marquee id="marqueeText" behavior="scroll" direction="left" scrollamount="4">Welcome to 4chan-Style Chat</marquee>
+      </div>
+
+      <div id="screen">Loading…</div>
+
+      <div id="controls" style="display: none;">
+        <input id="msg" type="text" placeholder="Type message or /command (e.g. /help)" autocomplete="off">
+        <button id="sendBtn">Send</button>
+      </div>
+
+      <footer>Because, because, because...</footer>
+    </div>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" class="custom-dialog-overlay">
+    <div class="custom-dialog-card" id="profileModalCard">
+      <h3>Edit Profile</h3>
+      <div class="profile-pfp-container">
+        <img id="profilePfpPreview" class="profile-pfp-preview" src="https://i.imgur.com/8x83zR1.png" alt="Profile Picture Preview">
+        <input type="file" id="pfpUpload" accept="image/*" style="display: none;">
+        <button onclick="document.getElementById('pfpUpload').click()" style="padding: 8px 12px; background: #117743; color: #fff; border: none; border-radius: 0; cursor: pointer;">Upload PFP</button>
+      </div>
+      <div class="profile-input-group">
+        <label>Description</label>
+        <textarea id="profileDescInput" placeholder="Enter your description..."></textarea>
+      </div>
+      <div class="profile-input-group">
+        <label>
+          <input type="checkbox" id="nitroToggle"> Enable Nitro (Rainbow Name + Badge)
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button style="background: transparent; color: #000;" onclick="closeProfileModal()">Cancel</button>
+        <button onclick="saveProfile()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Channel Modal -->
+  <div id="addChannelModal" class="custom-dialog-overlay">
+    <div class="custom-dialog-card">
+      <h3>Join a Channel</h3>
+      <p>Select or create a channel to join.</p>
+      <div class="dialog-form-group">
+        <label>Channel Name</label>
+        <input type="text" id="customChanNameInput" placeholder="e.g. general">
+      </div>
+      <div class="dialog-actions">
+        <button style="background: transparent; color: #000;" onclick="closeChannelPopup()">Cancel</button>
+        <button onclick="submitChannelAddition()">Join Channel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase Config (REPLACE WITH YOUR OWN CONFIG KEYS) -->
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+  </script>
+
+  <script>
+    // Global Variables
+    let currentChannelName = "general";
+    let autoScroll = true;
+    let messageListener = null;
+    let channels = ["general"];
+
+    // DOM Elements
+    const screen = document.getElementById("screen");
+    const controls = document.getElementById("controls");
+    const msgInput = document.getElementById("msg");
+    const sendBtn = document.getElementById("sendBtn");
+    const marqueeText = document.getElementById("marqueeText");
+    const coverPage = document.getElementById("coverPage");
+    const enterChatBtn = document.getElementById("enterChatBtn");
+    const profileModal = document.getElementById("profileModal");
+    const pfpUpload = document.getElementById("pfpUpload");
+    const profilePfpPreview = document.getElementById("profilePfpPreview");
+    const profileDescInput = document.getElementById("profileDescInput");
+    const nitroToggle = document.getElementById("nitroToggle");
+    const editProfileBtn = document.getElementById("editProfileBtn");
+    const sessionUserLabel = document.getElementById("sessionUserLabel");
+
+    // Boot Lines
+    const bootLines = [
+      "TERMINAL BEGIN;",
+      "Initializing 4chan-style kernel...",
+      "Loading chat modules...",
+      "Security Daemon... ENGAGED",
+      "System corruption check... OK",
+      "Boot complete; WELCOME TO THE CHAT."
+    ];
+
+    // Initialize
+    document.addEventListener("DOMContentLoaded", () => {
+      if (enterChatBtn) {
+        enterChatBtn.addEventListener("click", () => {
+          coverPage.style.display = "none";
+          playBootThenStart();
+        });
+      }
+
+      if (pfpUpload) {
+        pfpUpload.addEventListener("change", handlePfpUpload);
+      }
+
+      if (editProfileBtn) {
+        editProfileBtn.addEventListener("click", openProfileModal);
+      }
+
+      if (sendBtn) {
+        sendBtn.addEventListener("click", send);
+      }
+
+      if (msgInput) {
+        msgInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") send();
+        });
+      }
+
+      buildChannelUI();
+    });
+
+    // Handle Auth Logins (Anonymous Auth)
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        // Automatically check if they have a saved username profile
+        db.collection("users").doc(user.uid).get().then((doc) => {
+          const userData = doc.data() || {};
+          const currentUsername = userData.username || `Anon_${user.uid.substring(0, 5)}`;
+          sessionUserLabel.textContent = currentUsername;
+          editProfileBtn.style.display = "block";
+        });
+      } else {
+        auth.signInAnonymously().catch(err => console.error("Anonymous Sign-in failed:", err));
+      }
+    });
+
+    // Boot Sequence
+    function playBootThenStart() {
+      const overlay = document.createElement("div");
+      overlay.id = "bootOverlay";
+      const panel = document.createElement("div");
+      panel.style.maxWidth = "880px";
+      panel.style.margin = "12px auto";
+      panel.style.fontFamily = "'Courier New', monospace";
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+
+      let idx = 0;
+      function next() {
+        if (idx >= bootLines.length) {
+          overlay.style.transition = "opacity 0.45s";
+          overlay.style.opacity = "0";
+          setTimeout(() => {
+            overlay.remove();
+            startChat();
+          }, 480);
+          return;
+        }
+        const ln = document.createElement("div");
+        ln.className = "boot-line";
+        ln.textContent = bootLines[idx++];
+        panel.appendChild(ln);
+        setTimeout(next, 80 + Math.random() * 60);
+      }
+      next();
+    }
+
+    // Start Chat with Real-Time Database Streams
+    function startChat() {
+      if (controls) controls.style.display = "flex";
+      if (msgInput) msgInput.disabled = false;
+      if (sendBtn) sendBtn.disabled = false;
+
+      screen.innerHTML = "Connecting to chat..."
+      
+      if (messageListener) messageListener(); // Clean up old listener
+
+      // Use a real-time listener instead of intervals (onSnapshot)
+      messageListener = db.collection("channels").doc(currentChannelName).collection("messages")
+        .orderBy("timestamp")
+        .limit(50)
+        .onSnapshot((querySnapshot) => {
+          const messages = [];
+          querySnapshot.forEach((doc) => {
+            messages.push(doc.data());
+          });
+          renderMessages(messages);
+        }, (error) => {
+          console.error("Listening failed. Check Firestore Security Rules:", error);
+        });
+    }
+
+    // Render Messages
+    function renderMessages(messages) {
+      if (messages.length === 0) {
+        screen.innerHTML = "<div class='line sys'>No messages yet. Be the first to send one!</div>";
+        return;
+      }
+
+      screen.innerHTML = "";
+      messages.forEach((msg) => {
+        appendLineToDOM(msg);
+      });
+      if (autoScroll) screen.scrollTop = screen.scrollHeight;
+    }
+
+    // Append Line to DOM
+    function appendLineToDOM(msg) {
+      if (!msg || !msg.text) return;
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "line";
+
+      if (msg.text.indexOf("[SYSTEM]") === 0) {
+        wrapper.className = "line sys";
+        wrapper.textContent = msg.text;
+        screen.appendChild(wrapper);
+        return;
+      }
+
+      const userInfoContainer = document.createElement("span");
+      userInfoContainer.className = "user-info-container";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "name";
+      
+      const formattedTime = msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : "sending...";
+      nameSpan.textContent = `[${msg.username} | ${formattedTime}] `;
+
+      // Check for Nitro
+      if (msg.isNitro) {
+        nameSpan.classList.add("rainbow");
+      }
+
+      // Add PFP if available
+      let pfpSrc = msg.pfp || "https://i.imgur.com/8x83zR1.png";
+      const pfpImg = document.createElement("img");
+      pfpImg.className = "user-pfp";
+      pfpImg.src = pfpSrc;
+      pfpImg.alt = "PFP";
+      userInfoContainer.prepend(pfpImg);
+
+      // Add hover box
+      const hoverBox = document.createElement("div");
+      hoverBox.className = "user-hover-box";
+      hoverBox.innerHTML = `
+        <img src="${pfpSrc}" class="pfp-large" alt="PFP">
+        <div class="username">${msg.username} ${msg.isNitro ? '<span class="nitro-badge">Nitro</span>' : ''}</div>
+        <div class="description">${msg.description || "No description set."}</div>
+      `;
+      userInfoContainer.appendChild(hoverBox);
+
+      // Show hover box on mouse enter
+      userInfoContainer.addEventListener("mouseenter", () => {
+        hoverBox.classList.add("visible");
+      });
+
+      userInfoContainer.addEventListener("mouseleave", () => {
+        hoverBox.classList.remove("visible");
+      });
+
+      userInfoContainer.appendChild(nameSpan);
+      wrapper.appendChild(userInfoContainer);
+
+      const msgSpan = document.createElement("span");
+      msgSpan.className = "msgtext";
+      msgSpan.textContent = msg.text;
+      wrapper.appendChild(msgSpan);
+
+      screen.appendChild(wrapper);
+      if (autoScroll) screen.scrollTop = screen.scrollHeight;
+    }
+
+    // Send Message
+    function send() {
+      const text = msgInput.value.trim();
+      if (!text) return;
+      msgInput.value = "";
+
+      if (text.startsWith("/")) {
+        handleCommand(text);
+        return;
+      }
+
+      const user = auth.currentUser;
+      if (!user) {
+        alert("You are not authenticated yet.");
+        return;
+      }
+
+      // Retrieve secure user profile details
+      db.collection("users").doc(user.uid).get().then((doc) => {
+        const userData = doc.data() || {};
+        const pfp = userData.pfp || "https://i.imgur.com/8x83zR1.png";
+        const description = userData.description || "";
+        const isNitro = userData.isNitro || false;
+        const currentName = userData.username || `Anon_${user.uid.substring(0, 5)}`;
+
+        db.collection("channels").doc(currentChannelName).collection("messages").add({
+          username: currentName,
+          text: text,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          pfp: pfp,
+          description: description,
+          isNitro: isNitro
+        });
+      });
+    }
+
+    // Handle Commands securely
+    function handleCommand(text) {
+      const parts = text.split(" ");
+      const cmd = parts[0].toLowerCase();
+      const user = auth.currentUser;
+
+      if (!user) return;
+
+      if (cmd === "/help") {
+        const helpText = `[SYSTEM] Available Commands:\n` +
+          `• /help - Show this help message\n` +
+          `• /rename <name> - Change your username\n` +
+          `• /me <action> - Perform an action\n` +
+          `• /info - Show channel info`;
+        appendSystemMessage(helpText);
+      }
+
+      else if (cmd === "/rename") {
+        if (parts.length < 2) {
+          appendSystemMessage("Usage: /rename <newName>");
+          return;
+        }
+        const newName = parts.slice(1).join(" ").trim().substring(0, 40);
+
+        // Update the name securely inside the logged-in user's profile document
+        db.collection("users").doc(user.uid).set({
+          username: newName
+        }, { merge: true }).then(() => {
+          sessionUserLabel.textContent = newName;
+          appendSystemMessage(`Your username is now: ${newName}`);
+        });
+      }
+
+      else if (cmd === "/me") {
+        if (parts.length < 2) {
+          appendSystemMessage("Usage: /me <action>");
+          return;
+        }
+        const action = parts.slice(1).join(" ").trim();
+        db.collection("users").doc(user.uid).get().then((doc) => {
+          const currentName = (doc.data() && doc.data().username) || `Anon_${user.uid.substring(0, 5)}`;
+          const message = `[SYSTEM] * ${currentName} ${action} *`;
+          appendSystemMessage(message);
+        });
+      }
+
+      else if (cmd === "/info") {
+        appendSystemMessage(`[SYSTEM] Current channel: #${currentChannelName}`);
+      }
+
+      else {
+        appendSystemMessage("Unknown command. Type /help for available commands.");
+      }
+    }
+
+    // Append System Message
+    function appendSystemMessage(text) {
+      const div = document.createElement("div");
+      div.className = "line sys";
+      div.textContent = text;
+      screen.appendChild(div);
+      if (autoScroll) screen.scrollTop = screen.scrollHeight;
+    }
+
+    // Profile Modal Functions (Securely tied to Auth UID)
+    function openProfileModal() {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      profileModal.style.display = "flex";
+
+      db.collection("users").doc(user.uid).get().then((doc) => {
+        const userData = doc.data() || {};
+        profileDescInput.value = userData.description || "";
+        nitroToggle.checked = userData.isNitro || false;
+        profilePfpPreview.src = userData.pfp || "https://i.imgur.com/8x83zR1.png";
+      });
+    }
+
+    function closeProfileModal() {
+      profileModal.style.display = "none";
+    }
+
+    function handlePfpUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          canvas.width = 100;
+          canvas.height = 100;
+          ctx.drawImage(img, 0, 0, 100, 100);
+          const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+          profilePfpPreview.src = compressedBase64;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function saveProfile() {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const description = profileDescInput.value.trim();
+      const pfpBase64 = profilePfpPreview.src;
+      const isNitro = nitroToggle.checked;
+
+      db.collection("users").doc(user.uid).set({
+        description: description,
+        pfp: pfpBase64,
+        isNitro: isNitro,
+        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true }).then(() => {
+        closeProfileModal();
+        appendSystemMessage("Profile updated successfully!");
+        
+        // Live update user tag on screen
+        db.collection("users").doc(user.uid).get().then((doc) => {
+          sessionUserLabel.textContent = doc.data().username || `Anon_${user.uid.substring(0, 5)}`;
+        });
+      });
+    }
+
+    // Channel Functions
+    function buildChannelUI() {
+      const container = document.getElementById("dynamicChannelContainer");
+      if (!container) return;
+      container.innerHTML = "";
+
+      channels.forEach((channel) => {
+        const div = document.createElement("div");
+        div.className = "channel-item" + (channel === currentChannelName ? " active" : "");
+        div.textContent = channel;
+        div.addEventListener("click", () => {
+          switchChannel(channel);
+        });
+        container.appendChild(div);
+      });
+    }
+
+    function switchChannel(channelName) {
+      currentChannelName = channelName;
+      document.querySelectorAll(".channel-item").forEach(el => {
+        el.classList.remove("active");
+      });
+      marqueeText.textContent = `WELCOME TO #${channelName}`;
+      screen.innerHTML = "<div class='line sys'>Switched to #${channelName}</div>";
+      startChat();
+      buildChannelUI();
+    }
+
+    function openChannelPopup() {
+      const modal = document.getElementById("addChannelModal");
+      if (modal) modal.style.display = "flex";
+    }
+
+    function closeChannelPopup() {
+      const modal = document.getElementById("addChannelModal");
+      if (modal) modal.style.display = "none";
+    }
+
+    function submitChannelAddition() {
+      const nameInput = document.getElementById("customChanNameInput");
+      const channelName = nameInput.value.trim().toLowerCase();
+      if (!channelName) {
+        alert("Channel name cannot be empty.");
+        return;
+      }
+      if (channels.includes(channelName)) {
+        alert("Channel already exists.");
+        return;
+      }
+      channels.push(channelName);
+      closeChannelPopup();
+      buildChannelUI();
+      switchChannel(channelName);
+    }
+
+    // Scroll Handling
+    if (screen) {
+      screen.addEventListener("scroll", () => {
+        autoScroll = Math.abs(screen.scrollHeight - screen.clientHeight - screen.scrollTop) < 5;
+      });
+    }
+  </script>
+</body>
+</html>
